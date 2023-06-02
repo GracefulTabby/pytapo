@@ -78,11 +78,12 @@ class Downloader:
             )
             segmentLength = self.endTime - self.startTime
             if self.fileName is None:
-                fileName = (
-                    self.outputDirectory + str(dateStart) + "-" + dateEnd + ".mp4"
+                fileName = os.path.join(
+                    self.outputDirectory,
+                    f"{dateStart}-{dateEnd}.mp4",
                 )
             else:
-                fileName = self.outputDirectory + self.fileName
+                fileName = os.path.join(self.outputDirectory, self.fileName)
             if self.scriptStartTime - self.FRESH_RECORDING_TIME_SECONDS < self.endTime:
                 currentAction = "Recording in progress"
                 yield {
@@ -103,7 +104,7 @@ class Downloader:
                 downloading = False
             else:
                 convert = Convert()
-                mediaSession = self.tapo.getMediaSession()
+                mediaSession = self.tapo.getMediaSession(str(self.startTime))
                 if retry:
                     mediaSession.set_window_size(50)
                 else:

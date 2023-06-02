@@ -7,6 +7,7 @@ import warnings
 from asyncio import StreamReader, StreamWriter, Task, Queue
 from json import JSONDecodeError
 from typing import Optional, Mapping, Generator, MutableMapping
+import urllib.parse
 
 from rtp import PayloadType
 
@@ -15,6 +16,7 @@ from pytapo.media_stream._utils import (
     md5digest,
     parse_http_response,
     parse_http_headers,
+    check_and_currect_http_response,
 )
 from pytapo.media_stream.crypto import AESHelper
 from pytapo.media_stream.error import (
@@ -37,6 +39,7 @@ class HttpMediaSession:
         port: int = 8800,
         username: str = "admin",
         multipart_boundary: bytes = b"--client-stream-boundary--",
+        query_params: dict = {},
     ):
         self.ip = ip
         self.window_size = window_size
@@ -46,6 +49,11 @@ class HttpMediaSession:
         self.port = port
         self.username = username
         self.client_boundary = multipart_boundary
+
+        self.query_params = query_params
+        self.query_params_str = ""
+        if any(query_params):
+            self.query_params_str = f"?{urllib.parse.urlencode(query_params)}"
 
         self._started: bool = False
         self._response_handler_task: Optional[Task] = None
@@ -75,7 +83,7 @@ class HttpMediaSession:
         return self
 
     async def start(self):
-        req_line = b"POST /stream HTTP/1.1"
+        req_line = f"POST /stream{self.query_params_str} HTTP/1.1".encode()
         headers = {
             b"Content-Type": "multipart/mixed;boundary={}".format(
                 self.client_boundary.decode()
@@ -83,6 +91,8 @@ class HttpMediaSession:
             b"Connection": b"keep-alive",
             b"Content-Length": b"-1",
         }
+        if self.query_params_str:
+            headers[b"X-Client-UUID"] = self.query_params["playerId"].encode()
         try:
             self._reader, self._writer = await asyncio.open_connection(
                 self.ip, self.port
@@ -150,6 +160,7 @@ class HttpMediaSession:
 
             # Ensure the request was successful
             data = await self._reader.readuntil(b"\r\n\r\n")
+            data = check_and_currect_http_response(data)
             res_line, headers_block = data.split(b"\r\n", 1)
             _, status_code, _ = parse_http_response(res_line)
             if status_code != 200:

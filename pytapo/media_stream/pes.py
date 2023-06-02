@@ -66,7 +66,9 @@ class PES:
                 hasPTS = 0b1000_0000
                 if flags & hasPTS:
                     ts = parse_time(self.Payload[self.minHeaderSize :])
-
+                    # Retrieval via hub does not get timestamp.
+                    if (type(ts) != int) or ((ts < 0) or (ts >= 2**32)):
+                        ts = 0
                 streamType = None
                 for var_name, var_value in vars(PayloadType).items():
                     if var_value == self.StreamType:

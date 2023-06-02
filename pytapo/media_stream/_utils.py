@@ -4,6 +4,25 @@ import os
 from typing import Mapping, Tuple, Optional
 
 
+def check_and_currect_http_response(data: bytes) -> bytes:
+    __HTTP_VERSION_LIST = [
+        "HTTP/0.9",
+        "HTTP/1.0",
+        "HTTP/1.1",
+        "HTTP/2",
+        "HTTP/3",
+    ]
+    decode_data = data.decode()
+    check = any([decode_data.startswith(v) for v in __HTTP_VERSION_LIST])
+    if not check:
+        for v in __HTTP_VERSION_LIST:
+            pos = decode_data.find(v)
+            if pos != -1:
+                return decode_data[pos:].encode()
+    else:
+        return data
+
+
 def md5digest(to_hash: bytes) -> bytes:
     return hashlib.md5(to_hash).digest().hex().upper().encode()
 

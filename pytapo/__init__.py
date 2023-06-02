@@ -12,14 +12,16 @@ from warnings import warn
 
 from .const import ERROR_CODES, MAX_LOGIN_RETRIES
 from .media_stream.session import HttpMediaSession
-from datetime import datetime
+from datetime import datetime, timedelta
+from retry import retry
+
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class Tapo:
     def __init__(
-        self, host, user, password, cloudPassword="", superSecretKey="", childID=None
+        self, host, user, password, cloudPassword="", superSecretKey="", childID=None, playerID=None,
     ):
         self.host = host
         self.user = user
@@ -29,6 +31,7 @@ class Tapo:
         self.stok = False
         self.userID = False
         self.childID = childID
+        self.playerID = playerID
         self.timeCorrection = False
         self.headers = {
             "Host": self.host,
@@ -204,9 +207,22 @@ class Tapo:
         elif self.responseIsOK(res):
             return responseJSON
 
-    def getMediaSession(self):
+    def getMediaSession(self, start_time=""):
+        basicInfo = self.basicInfo["device_info"]["basic_info"]
+        if basicInfo["device_model"] in ["C400", "C420"]:
+            query_params = {
+                "deviceId": basicInfo["dev_id"],
+                "playerId": self.playerID,
+                "type": "sdvod",
+                "start_time": start_time,
+            }
+        else:
+            query_params = {}
         return HttpMediaSession(
-            self.host, self.cloudPassword, self.superSecretKey
+            self.host,
+            self.cloudPassword,
+            self.superSecretKey,
+            query_params=query_params,
         )  # pragma: no cover
 
     def getChildDevices(self):
@@ -563,6 +579,7 @@ class Tapo:
             )["result"]["responses"][0]["result"]["user_id"]
         return self.userID
 
+    @retry(tries=3)
     def getRecordingsList(self, start_date="20000101", end_date=None):
         if end_date is None:
             end_date = datetime.today().strftime("%Y%m%d")
@@ -583,6 +600,16 @@ class Tapo:
         return result["playback"]["search_results"]
 
     def getRecordings(self, date, start_index=0, end_index=999999999):
+        if self.basicInfo.get("device_info").get("basic_info").get("device_model") in [
+            "C400",
+            "C420",
+        ]:
+            date_object = datetime.strptime(date, "%Y%m%d")
+            start_time = int(date_object.timestamp())
+            end_time = int(
+                (date_object + timedelta(hours=23, minutes=59, seconds=59)).timestamp()
+            )
+            return self.getRecordingsUTC(start_time, end_time, start_index, end_index)
         result = self.executeFunction(
             "searchVideoOfDay",
             {
@@ -593,6 +620,51 @@ class Tapo:
                         "end_index": end_index,
                         "id": self.getUserID(),
                         "start_index": start_index,
+                    }
+                }
+            },
+        )
+        if "playback" not in result:
+            raise Exception("Video playback is not supported by this camera")
+        return result["playback"]["search_video_results"]
+
+    def searchDetectionList(
+        self, start_time, end_time, start_index=0, end_index=999999999
+    ):
+        # h200 supported API
+        result = self.executeFunction(
+            "searchDetectionList",
+            {
+                "playback": {
+                    "search_detection_list": {
+                        "channel": 0,
+                        "end_index": end_index,
+                        "end_time": end_time,
+                        "start_index": start_index,
+                        "start_time": start_time,
+                    }
+                }
+            },
+        )
+        if "playback" not in result:
+            raise Exception("Video playback is not supported by this camera")
+        return result["playback"]["search_video_results"]
+
+    def getRecordingsUTC(
+        self, start_time, end_time, start_index=0, end_index=999999999
+    ):
+        # h200 supported API
+        result = self.executeFunction(
+            "searchVideoWithUTC",
+            {
+                "playback": {
+                    "search_video_with_utc": {
+                        "channel": 0,
+                        "end_time": end_time ,
+                        "end_index": end_index,
+                        "id": self.getUserID(),
+                        "start_index": start_index,
+                        "start_time":start_time,
                     }
                 }
             },

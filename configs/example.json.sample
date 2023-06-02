@@ -1,0 +1,11 @@
+{
+    "outputRootDir": "./output",
+    "type": "TAPO.HUB",
+    "host":"172.0.0.2",
+    "user": "admin",
+    "password": "password",
+    "cloudPassword": "password",
+    "superSecretKey": "", 
+    "playerID": "145BDEA3-B18C-288D-61AD-342C312E9FEA",
+    "windowSize": 50
+}
